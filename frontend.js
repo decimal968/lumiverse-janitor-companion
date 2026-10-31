@@ -154,7 +154,7 @@ async function importCharacter({ card, avatar }) {
 
 // ---------- UI ----------
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 const HISTORY_KEY = "janitor_companion.imports.v1";
 const HISTORY_MAX = 30;
 
@@ -218,6 +218,8 @@ const CSS = `
 .jc-steps li { counter-increment: s; display: flex; gap: 10px; font-size: 13px; line-height: 1.5; color: var(--jc-muted); }
 .jc-steps li::before { content: counter(s); flex: 0 0 22px; height: 22px; border-radius: 999px; background: var(--jc-panel-2); border: 1px solid var(--jc-border); color: var(--jc-accent); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
 .jc-steps b { color: var(--jc-text); font-weight: 600; }
+.jc-addr { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.jc-addr code { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--jc-bg); border: 1px solid var(--jc-border); font-size: 12px; overflow-wrap: anywhere; user-select: all; }
 .jc-drop { border: 1.5px dashed var(--jc-border); border-radius: 14px; padding: 26px 14px; text-align: center; font-size: 13px; color: var(--jc-muted); cursor: pointer; background: rgba(255,255,255,.02); }
 .jc-drop[data-over] { border-color: var(--jc-accent); color: var(--jc-text); }
 .jc-list { display: flex; flex-direction: column; gap: 8px; }
@@ -271,11 +273,17 @@ export function setup(ctx) {
           <div class="jc-status" data-window-status></div>
         </div>
         <div class="jc-card">
-          <h2>How it works</h2>
+          <h2>Send cards straight here</h2>
           <ol class="jc-steps">
-            <li><span>Open JanitorAI and find a character.</span></li>
-            <li><span data-step-export><b>Scan &amp; export</b> it with JAI Exporter (pick CHARX).</span></li>
-            <li><span>Open <b>Imports</b> here and drop the file in. Then tap <b>Chat</b>.</span></li>
+            <li><span>Install <b>JAI Exporter 0.8.0</b> (the build with “Send to Lumiverse”) in a desktop browser.</span></li>
+            <li><span>In its panel open <b>Setup → Lumiverse → Set up Lumiverse…</b> and paste this address:</span></li>
+          </ol>
+          <div class="jc-addr">
+            <code data-addr></code>
+            <button class="jc-btn" type="button" data-act="copy">Copy</button>
+          </div>
+          <ol class="jc-steps" start="3" style="counter-reset: s 2; margin-top: 10px;">
+            <li><span>Keep this Lumiverse tab open and signed in. Scan a character on JanitorAI and it appears under <b>Imports</b> by itself.</span></li>
           </ol>
         </div>
       </div>
@@ -297,6 +305,8 @@ export function setup(ctx) {
   const openBtn = $('[data-act="open"]');
   const tabBtn = $('[data-act="tab"]');
 
+  $("[data-addr]").textContent = window.location.origin;
+
   if (mobile) {
     $("[data-browse-note]").textContent =
       "Opens JanitorAI in a new tab. Use your browser's back button to return to Lumiverse. Browser extensions don't run on phone browsers, so capture cards with JAI Exporter on a desktop and import the files here.";
@@ -304,7 +314,7 @@ export function setup(ctx) {
     tabBtn.hidden = true;
   } else {
     $("[data-browse-note]").textContent =
-      "Opens JanitorAI in its own window beside Lumiverse, so your JAI Exporter extension runs there as normal. Allow pop-ups for this site if nothing opens.";
+      "Opens JanitorAI in its own window (or tab) so your JAI Exporter extension runs there. Allow pop-ups for this site if nothing opens.";
     openBtn.textContent = "Open beside Lumiverse";
   }
 
@@ -476,6 +486,13 @@ export function setup(ctx) {
     if (t.dataset.view) return setView(t.dataset.view);
     if (t.dataset.act === "open") return openJai();
     if (t.dataset.act === "tab") return void window.open(HOME_URL, "_blank", "noopener");
+    if (t.dataset.act === "copy") {
+      const done = () => { t.textContent = "Copied"; setTimeout(() => { t.textContent = "Copy"; }, 1500); };
+      try {
+        navigator.clipboard.writeText(window.location.origin).then(done, () => {});
+      } catch (_) {}
+      return;
+    }
     if (t.dataset.chat) {
       const surfaces = ctx.host && ctx.host.surfaces;
       if (!surfaces) return;
@@ -507,6 +524,25 @@ export function setup(ctx) {
     delete drop.dataset.over;
     if (e.dataTransfer && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
   };
+  // JAI Exporter 0.8.0 posts this into the page after it imports a card.
+  const onExporterMessage = (e) => {
+    const d = e.data;
+    if (e.source !== window || e.origin !== window.location.origin) return;
+    if (!d || d.source !== "jai-exporter" || d.type !== "imported" || !d.characterId) return;
+    if (items.some((i) => i.characterId === d.characterId && i.state === "done")) return;
+    items.unshift({
+      name: String(d.name || "Imported character").slice(0, 200),
+      state: "done",
+      characterId: String(d.characterId),
+      at: Date.now(),
+      note: ["Sent by JAI Exporter", d.note ? String(d.note).slice(0, 200) : ""].filter(Boolean).join(" · "),
+    });
+    persist();
+    renderList();
+    windowStatus.textContent = `Imported “${items[0].name}” from JAI Exporter. See Imports.`;
+  };
+  window.addEventListener("message", onExporterMessage);
+
   root.addEventListener("click", onRootClick);
   drop.addEventListener("click", onDropClick);
   fileInput.addEventListener("change", onChange);
@@ -519,6 +555,7 @@ export function setup(ctx) {
     cancelAnimationFrame(raf);
     clearFrame();
     if (stopActivation) stopActivation();
+    window.removeEventListener("message", onExporterMessage);
     root.removeEventListener("click", onRootClick);
     drop.removeEventListener("click", onDropClick);
     fileInput.removeEventListener("change", onChange);

@@ -1,11 +1,11 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "name": "JanitorAI Companion",
   "identifier": "janitor_companion",
   "author": "Shivam",
   "github": "https://github.com/decimal968/lumiverse-janitor-companion",
   "homepage": "https://github.com/decimal968/lumiverse-janitor-companion",
-  "description": "Open JanitorAI in a window beside Lumiverse (so the JAI Exporter browser extension runs on it) and import the exported .charx / .json cards.",
+  "description": "Open JanitorAI beside Lumiverse and import cards sent by the JAI Exporter browser extension (or dropped as .charx / .json).",
   "permissions": [],
   "entry_frontend": "frontend.js"
 }

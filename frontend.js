@@ -419,7 +419,7 @@ export function setup(ctx) {
 
   function openJai() {
     if (mobile) {
-      window.open(HOME_URL, "_blank");
+      window.open(HOME_URL, "_blank", "noopener");
       windowStatus.textContent = "Opened JanitorAI in a new tab.";
       return;
     }
